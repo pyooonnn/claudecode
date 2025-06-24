@@ -147,13 +147,26 @@ echo [1/4] Clearing workspace...
 del /Q workspace\* 2>nul
 for /d %%x in (workspace\*) do rd /s /q "%%x" 2>nul
 echo [2/4] Loading project '%project_name%' into workspace...
-xcopy "projects\%project_name%\*" "workspace\" /E /I /Q 2>nul
+REM Git関連ファイル・フォルダーを除外してコピー
+for /f "delims=" %%i in ('dir /b /a-d "projects\%project_name%"') do (
+    if not "%%i"==".git" (
+        if not "%%i"==".gitignore" (
+            copy "projects\%project_name%\%%i" "workspace\" >nul 2>&1
+        )
+    )
+)
+for /f "delims=" %%i in ('dir /b /ad "projects\%project_name%"') do (
+    if not "%%i"==".git" (
+        xcopy "projects\%project_name%\%%i" "workspace\%%i\" /E /I /Q >nul 2>&1
+    )
+)
 echo [3/4] Starting Claude Code container...
 docker-compose up -d
 echo [4/4] Connecting to Claude Code with project loaded...
 echo.
 echo ==========================================
 echo  Project '%project_name%' loaded in workspace
+echo  Git files (.git, .gitignore) excluded
 echo  You can now use Claude Code to work on it
 echo  Commands to run in container:
 echo  1. /home/claude/check-claude.sh
@@ -187,18 +200,30 @@ if not exist "projects\%project_name%" (
     dir /b projects 2>nul
     goto end
 )
-echo [1/3] Backing up current project...
-if exist "projects\%project_name%.backup" rd /s /q "projects\%project_name%.backup"
-xcopy "projects\%project_name%" "projects\%project_name%.backup\" /E /I /Q 2>nul
-echo [2/3] Saving workspace changes to projects\%project_name%...
-del /Q "projects\%project_name%\*" 2>nul
-for /d %%x in ("projects\%project_name%\*") do rd /s /q "%%x" 2>nul
+echo [1/3] Saving workspace changes to projects\%project_name%...
+REM Git関連ファイル以外を削除
+for /f "delims=" %%i in ('dir /b /a-d "projects\%project_name%"') do (
+    if not "%%i"==".git" (
+        if not "%%i"==".gitignore" (
+            del "projects\%project_name%\%%i" 2>nul
+        )
+    )
+)
+for /f "delims=" %%i in ('dir /b /ad "projects\%project_name%"') do (
+    if not "%%i"==".git" (
+        rd /s /q "projects\%project_name%\%%i" 2>nul
+    )
+)
+REM workspaceの内容をコピー
 xcopy "workspace\*" "projects\%project_name%\" /E /I /Q 2>nul
+echo [2/3] Clearing workspace...
+del /Q workspace\* 2>nul
+for /d %%x in (workspace\*) do rd /s /q "%%x" 2>nul
 echo [3/3] Complete
 echo.
 echo ✅ Workspace saved to 'projects\%project_name%'
-echo ✅ Backup created at 'projects\%project_name%.backup'
-echo You can continue working or switch to another project
+echo ✅ Git files (.git, .gitignore) preserved
+echo ✅ Workspace cleared and ready for next project
 goto end
 
 :clean
